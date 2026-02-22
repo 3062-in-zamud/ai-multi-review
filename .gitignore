@@ -2,5 +2,10 @@
 logs/
 reports/
 
+# Claude Code harness (auto-generated)
+.claude/
+**/CLAUDE.md
+knowledge/
+
 # OS
 .DS_Store
