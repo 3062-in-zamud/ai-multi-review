@@ -6,11 +6,12 @@ issuesが無い場合は空配列を返してください。
   "issues": [
     {
       "severity": "blocking または advisory",
-      "category": "security|correctness|perf|maintainability|testing|style",
+      "category": "security|correctness|data-compat|error-handling|concurrency|perf|dependency|maintainability|testing|style",
       "file": "ファイルパス",
       "lines": "開始行-終了行",
       "problem": "問題の簡潔な説明",
-      "recommendation": "具体的な修正案"
+      "recommendation": "具体的な修正案",
+      "confidence": "high|medium|low (確信度)"
     }
   ]
 }

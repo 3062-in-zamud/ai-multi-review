@@ -1,0 +1,59 @@
+{
+  "issues": [
+    {
+      "id": "B-1",
+      "severity": "blocking",
+      "category": "security",
+      "file": "src/api/auth.ts",
+      "lines": "42-45",
+      "problem": "User input is passed directly to SQL query without parameterization, allowing SQL injection",
+      "recommendation": "Use parameterized queries: db.query('SELECT * FROM users WHERE id = $1', [userId])",
+      "detected_by": ["claude", "codex"],
+      "high_confidence": true
+    },
+    {
+      "id": "B-2",
+      "severity": "blocking",
+      "category": "correctness",
+      "file": "src/utils/parser.ts",
+      "lines": "78-82",
+      "problem": "Null reference error when input array is empty — .reduce() without initial value throws on empty array",
+      "recommendation": "Add initial value to reduce: arr.reduce((acc, x) => acc + x, 0)",
+      "detected_by": ["claude"],
+      "high_confidence": false
+    },
+    {
+      "id": "A-1",
+      "severity": "advisory",
+      "category": "perf",
+      "file": "src/services/data.ts",
+      "lines": "120-135",
+      "problem": "N+1 query pattern: fetching related records inside a loop instead of batch query",
+      "recommendation": "Use a single query with IN clause or JOIN to fetch all related records at once",
+      "detected_by": ["codex", "coderabbit"],
+      "high_confidence": true
+    },
+    {
+      "id": "A-2",
+      "severity": "advisory",
+      "category": "maintainability",
+      "file": "src/components/Dashboard.tsx",
+      "lines": "15-20",
+      "problem": "Magic number 86400 used without explanation",
+      "recommendation": "Extract to named constant: const SECONDS_PER_DAY = 86400",
+      "detected_by": ["coderabbit"],
+      "high_confidence": false
+    },
+    {
+      "id": "A-3",
+      "severity": "advisory",
+      "category": "testing",
+      "file": "src/api/auth.ts",
+      "lines": "1-50",
+      "problem": "No unit tests for authentication middleware",
+      "recommendation": "Add tests covering valid token, expired token, and missing token scenarios",
+      "detected_by": ["claude", "codex"],
+      "high_confidence": true
+    }
+  ]
+}

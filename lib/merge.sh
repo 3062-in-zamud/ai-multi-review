@@ -54,7 +54,7 @@ merge_results() {
     return
   fi
 
-  # 重複除去
+  # 重複除去（confidence マージ対応）
   echo "$merged_json" | jq --argjson range "$dedup_range" '
     # B-5: 空文字列の lines に対応
     def line_start:
@@ -67,12 +67,41 @@ merge_results() {
     # A-2: abs イディオム改善
     def abs: if . < 0 then -. else . end;
 
+    # confidence レベルを数値に変換
+    def conf_level:
+      if . == "high" then 3
+      elif . == "medium" then 2
+      elif . == "low" then 1
+      else 0
+      end;
+
+    # 数値を confidence 文字列に変換
+    def conf_str:
+      if . >= 3 then "high"
+      elif . == 2 then "medium"
+      elif . == 1 then "low"
+      else null
+      end;
+
     # B-6: null の file/category で誤マージしない
     def is_duplicate(a; b):
       (a.file != null) and (b.file != null)
       and a.file == b.file
       and a.category == b.category
       and (((a | line_start) - (b | line_start)) | abs <= $range);
+
+    # confidence マージ: 最大値採用、合意時1段階上げ
+    def merge_confidence(a; b):
+      (a.confidence // null) as $ac |
+      (b.confidence // null) as $bc |
+      if $ac == null and $bc == null then null
+      elif $ac == null then $bc
+      elif $bc == null then $ac
+      else
+        ([($ac | conf_level), ($bc | conf_level)] | max) as $max_level |
+        ([$max_level + 1, 3] | min) |
+        conf_str
+      end;
 
     # B-12: .problem / .recommendation の null 対応
     def merge_pair(a; b):
@@ -84,7 +113,8 @@ merge_results() {
         problem: (if ((a.problem // "") | length) >= ((b.problem // "") | length) then (a.problem // "") else (b.problem // "") end),
         recommendation: (if ((a.recommendation // "") | length) >= ((b.recommendation // "") | length) then (a.recommendation // "") else (b.recommendation // "") end),
         detected_by: (a.detected_by + b.detected_by | unique),
-        high_confidence: ((a.detected_by + b.detected_by | unique | length) > 1)
+        high_confidence: ((a.detected_by + b.detected_by | unique | length) > 1),
+        confidence: merge_confidence(a; b)
       };
 
     .issues as $all |
@@ -100,10 +130,11 @@ merge_results() {
           else . end
         )
       else
-        . + [$curr + {high_confidence: false}]
+        . + [$curr + {high_confidence: false, confidence: ($curr.confidence // null)}]
       end
     ) |
-    {issues: .}
+    # null confidence を除去（レポート側で非表示にするため残すが、clean up）
+    {issues: [.[] | if .confidence == null then del(.confidence) else . end]}
   ' 2>/dev/null || echo "$merged_json"
 }
 

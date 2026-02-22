@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2059,SC1090,SC2031,SC2329
 set -euo pipefail
 
 # ai-multi-review — Pre-PR Multi-LLM Code Review System
@@ -26,6 +27,9 @@ Options:
   --reviewers <list>       使用するレビュアー (カンマ区切り: claude,codex,coderabbit)
   --no-block               blocking判定を無効化 (常に exit 0)
   --output <path>          レポート出力先を指定
+  --context <text>         レビューコンテキスト情報 (PR説明、チケット番号等)
+  --context-file <path>    コンテキスト情報をファイルから読み込み
+  --dry-run                LLM呼び出しなしでプロンプト全文を表示
   --help                   このヘルプを表示
 
 Diff Detection (automatic):
@@ -38,6 +42,8 @@ Examples:
   ai-multi-review develop              # develop との差分
   ai-multi-review --reviewers claude   # Claude のみ
   ai-multi-review --no-block           # blocking でも exit 0
+  ai-multi-review --context "Fix #42"  # コンテキスト付きレビュー
+  ai-multi-review --dry-run            # プロンプト確認（LLM実行なし）
 HELP
   exit 0
 }
@@ -47,16 +53,22 @@ BASE_REF=""
 REVIEWER_FILTER=""
 NO_BLOCK=false
 OUTPUT_PATH=""
+REVIEW_CONTEXT=""
+REVIEW_CONTEXT_FILE=""
+DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --base)       BASE_REF="$2"; shift 2 ;;
-    --reviewers)  REVIEWER_FILTER="$2"; shift 2 ;;
-    --no-block)   NO_BLOCK=true; shift ;;
-    --output)     OUTPUT_PATH="$2"; shift 2 ;;
-    --help|-h)    show_help ;;
-    -*)           die "不明なオプション: $1（--help で使い方を確認）" ;;
-    *)            BASE_REF="$1"; shift ;;
+    --base)          BASE_REF="$2"; shift 2 ;;
+    --reviewers)     REVIEWER_FILTER="$2"; shift 2 ;;
+    --no-block)      NO_BLOCK=true; shift ;;
+    --output)        OUTPUT_PATH="$2"; shift 2 ;;
+    --context)       REVIEW_CONTEXT="$2"; shift 2 ;;
+    --context-file)  REVIEW_CONTEXT_FILE="$2"; shift 2 ;;
+    --dry-run)       DRY_RUN=true; shift ;;
+    --help|-h)       show_help ;;
+    -*)              die "不明なオプション: $1（--help で使い方を確認）" ;;
+    *)               BASE_REF="$1"; shift ;;
   esac
 done
 
@@ -66,8 +78,12 @@ BASE_REF="${BASE_REF:-$(config_get '.defaults.base_ref' 'main')}"
 PROJECT=$(get_project_name)
 BRANCH=$(get_branch_name)
 
+# サブシェル（並列レビュー）にコンテキスト変数を引き継ぐため export
+export REVIEW_CONTEXT REVIEW_CONTEXT_FILE BASE_REF
+
 # diff モード判定（コミット差分 → ステージ済み → 未ステージ の優先順）
 detect_diff_mode "$BASE_REF"
+export DIFF_MODE
 if [[ "$DIFF_MODE" == "none" ]]; then
   log_info "差分がありません（${BRANCH} vs ${BASE_REF}）。レビュー不要です。"
   exit 0
@@ -98,6 +114,15 @@ log_info "Files: ${FILES} | Lines: +${ADDED}/-${REMOVED}"
 DIFF_LINES=$(wc -l < "$DIFF_FILE" | tr -d ' ')
 if (( DIFF_LINES > 1000 )); then
   log_warn "大きなdiff（${DIFF_LINES}行）。レビュー時間が長くなる可能性があります。"
+fi
+
+# ━━━ [2.5] dry-run モード ━━━
+if $DRY_RUN; then
+  printf "${BOLD}━━━ System Prompt ━━━${RESET}\n" >&2
+  build_system_prompt
+  printf "\n${BOLD}━━━ User Prompt ━━━${RESET}\n" >&2
+  build_user_prompt "$DIFF_FILE"
+  exit 0
 fi
 
 # ━━━ [3] 並列レビュー実行 ━━━

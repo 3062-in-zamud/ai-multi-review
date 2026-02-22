@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034
 # coderabbit.sh — CodeRabbit CLI レビュアーアダプタ
 
 reviewer_name="coderabbit"

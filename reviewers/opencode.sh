@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034
 # opencode.sh — OpenCode CLI reviewer adapter (EXPERIMENTAL)
 
 reviewer_name="opencode"

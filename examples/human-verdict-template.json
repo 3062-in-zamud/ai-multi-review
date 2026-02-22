@@ -1,0 +1,18 @@
+{
+  "verdicts": [
+    {
+      "id": "B-1",
+      "file": "src/auth.ts",
+      "problem": "SQL injection vulnerability in user input handling",
+      "true_positive": true,
+      "comment": "Confirmed: unsanitized input passed to query"
+    },
+    {
+      "id": "A-1",
+      "file": "src/utils.ts",
+      "problem": "Unused import statement",
+      "true_positive": false,
+      "comment": "False positive: import is used in type annotation"
+    }
+  ]
+}

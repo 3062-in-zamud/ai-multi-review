@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034
 # claude.sh — Claude CLI レビュアーアダプタ
 
 reviewer_name="claude"
@@ -9,7 +10,6 @@ check_available() {
 
 run_review() {
   local diff_file="$1" out_file="$2"
-  local prompt_dir="${CONFIG_DIR}/prompts"
   local schema_file="${CONFIG_DIR}/lib/review-schema.json"
   local log_dir="${CONFIG_DIR}/logs"
   mkdir -p "$log_dir"
@@ -28,10 +28,8 @@ run_review() {
       --model "$model" \
       --output-format json \
       --json-schema "$(cat "$schema_file")" \
-      --system-prompt "$(cat "${prompt_dir}/review-system.md")" \
+      --system-prompt "$(build_system_prompt)" \
       --max-budget-usd "$budget" \
-      "$(cat "${prompt_dir}/review-user.md")
-
-$(cat "$diff_file")"
+      "$(build_user_prompt "$diff_file")"
   ) > "$out_file" 2>"$stderr_file"
 }

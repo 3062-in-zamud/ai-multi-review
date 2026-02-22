@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034,SC2016
 # codex.sh — Codex CLI レビュアーアダプタ
 
 reviewer_name="codex"
@@ -9,7 +10,6 @@ check_available() {
 
 run_review() {
   local diff_file="$1" out_file="$2"
-  local prompt_dir="${CONFIG_DIR}/prompts"
   local log_dir="${CONFIG_DIR}/logs"
   mkdir -p "$log_dir"
   local raw_file="${log_dir}/codex_raw.txt"
@@ -18,13 +18,11 @@ run_review() {
   # P-1: ツール使用禁止プロンプトでエージェント動作を抑止
   # codex exec は stdin を受け取らないため、CLI引数でdiffを渡す
   codex exec --sandbox read-only \
-    "$(cat "${prompt_dir}/review-system.md")
+    "$(build_system_prompt)
 
-$(cat "${prompt_dir}/review-user.md")
+$(build_user_prompt "$diff_file")
 
-重要: ファイルの読み込みやシェルコマンドの実行は行わず、以下のdiffの内容のみからレビューしてください。JSON形式で結果を出力してください。
-
-$(cat "$diff_file")" \
+重要: ファイルの読み込みやシェルコマンドの実行は行わず、以下のdiffの内容のみからレビューしてください。JSON形式で結果を出力してください。" \
     > "$raw_file" 2> >(grep -v 'declare -x \(AWS_\|SECRET\|TOKEN\|KEY\|PASSWORD\)' > "$stderr_file")
 
   # Codex は構造化出力を保証しないため、JSON抽出を試みる

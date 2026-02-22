@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034
 # gh-copilot.sh — GitHub Copilot CLI reviewer adapter (EXPERIMENTAL)
 
 reviewer_name="gh-copilot"

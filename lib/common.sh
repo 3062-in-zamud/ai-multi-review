@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034
 # common.sh — ai-multi-review 共通関数
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ai-multi-review"
@@ -222,6 +223,118 @@ rotate_reports() {
           rm -f "$md_file" "$json_file"
         done
   fi
+}
+
+# ━━━ プロジェクト固有ルール・コンテキスト注入 ━━━
+
+# プロジェクト固有ルールを取得（キャッシュ付き）
+# 優先順位: .ai-multi-review/rules.md > ~/.config/ai-multi-review/rules/{project}/rules.md
+get_project_rules() {
+  # キャッシュがあればそこから返す
+  if [[ -n "${TMPWORK:-}" && -f "${TMPWORK}/project_rules.txt" ]]; then
+    cat "${TMPWORK}/project_rules.txt"
+    return
+  fi
+
+  local rules=""
+  local repo_root
+  repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
+
+  # 1. リポジトリ内 .ai-multi-review/rules.md（最優先）
+  if [[ -n "$repo_root" && -f "${repo_root}/.ai-multi-review/rules.md" ]]; then
+    rules=$(cat "${repo_root}/.ai-multi-review/rules.md")
+  else
+    # 2. ユーザーローカル ~/.config/ai-multi-review/rules/{project}/rules.md
+    local project
+    project=$(get_project_name 2>/dev/null) || true
+    if [[ -n "$project" && -f "${CONFIG_DIR}/rules/${project}/rules.md" ]]; then
+      rules=$(cat "${CONFIG_DIR}/rules/${project}/rules.md")
+    fi
+  fi
+
+  # キャッシュに保存
+  if [[ -n "${TMPWORK:-}" ]]; then
+    echo "$rules" > "${TMPWORK}/project_rules.txt"
+  fi
+
+  echo "$rules"
+}
+
+# レビューコンテキストを取得
+# 優先順位: CLI引数(--context/--context-file) > .ai-multi-review/context.md > git metadata
+get_review_context() {
+  local context=""
+
+  # 1. CLI引数（グローバル変数 REVIEW_CONTEXT / REVIEW_CONTEXT_FILE）
+  if [[ -n "${REVIEW_CONTEXT:-}" ]]; then
+    context="$REVIEW_CONTEXT"
+  elif [[ -n "${REVIEW_CONTEXT_FILE:-}" ]]; then
+    if [[ -f "$REVIEW_CONTEXT_FILE" ]]; then
+      context=$(cat "$REVIEW_CONTEXT_FILE")
+    else
+      log_warn "コンテキストファイルが見つかりません: ${REVIEW_CONTEXT_FILE}"
+    fi
+  fi
+
+  # 2. リポジトリ内 .ai-multi-review/context.md
+  if [[ -z "$context" ]]; then
+    local repo_root
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
+    if [[ -n "$repo_root" && -f "${repo_root}/.ai-multi-review/context.md" ]]; then
+      context=$(cat "${repo_root}/.ai-multi-review/context.md")
+    fi
+  fi
+
+  # 3. git metadata（commit diff モードのみ）
+  if [[ -z "$context" && "${DIFF_MODE:-}" == "commit" ]]; then
+    local base_ref="${BASE_REF:-main}"
+    local git_context
+    git_context=$(git log --oneline --grep='Fixes #\|Closes #\|Refs #\|refs:' "${base_ref}...HEAD" 2>/dev/null) || true
+    if [[ -n "$git_context" ]]; then
+      context="Related commits:
+${git_context}"
+    fi
+  fi
+
+  echo "$context"
+}
+
+# システムプロンプト全文を組み立てて stdout に出力
+build_system_prompt() {
+  # 1. デフォルトのシステムプロンプト（常に）
+  cat "${CONFIG_DIR}/prompts/review-system.md"
+
+  # 2. プロジェクト固有ルール（あれば追記）
+  local rules
+  rules=$(get_project_rules)
+  if [[ -n "$rules" ]]; then
+    printf '\n\n## プロジェクト固有ルール\n\n%s' "$rules"
+  fi
+
+  # 3. コンテキスト活用の指示（コンテキストがあれば追記）
+  local context
+  context=$(get_review_context)
+  if [[ -n "$context" ]]; then
+    printf '\n\n## コンテキスト情報の活用\nユーザープロンプトにPR/チケット情報が含まれています。変更の意図を考慮してレビューしてください。'
+  fi
+}
+
+# ユーザープロンプト全文を組み立てて stdout に出力
+build_user_prompt() {
+  local diff_file="$1"
+
+  # 1. デフォルトのユーザープロンプト（常に）
+  cat "${CONFIG_DIR}/prompts/review-user.md"
+
+  # 2. コンテキスト情報（あれば挿入）
+  local context
+  context=$(get_review_context)
+  if [[ -n "$context" ]]; then
+    printf '\n## 変更コンテキスト\n%s\n\n' "$context"
+  fi
+
+  # 3. diff 本文
+  cat "$diff_file"
 }
 
 # ━━━ JSON正規化（LLMフォールバック） ━━━

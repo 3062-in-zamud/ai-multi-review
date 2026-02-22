@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034
 # aider.sh — Aider CLI reviewer adapter (EXPERIMENTAL)
 
 reviewer_name="aider"

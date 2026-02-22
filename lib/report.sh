@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2059
 # report.sh — レビューレポート生成（ターミナル表示 + Markdownファイル）
 
 # ターミナルにサマリーを表示
@@ -94,7 +95,8 @@ REPORT_EOF
       to_entries[] |
       "### [B-\(.key + 1)] \(.value.category // "unknown") - \(.value.file):\(.value.lines // "?")\n" +
       "- **Detected by**: \(.value.detected_by | join(", "))" +
-      (if .value.high_confidence then " (high confidence)" else "" end) + "\n" +
+      (if .value.high_confidence then " (high confidence)" else "" end) +
+      (if .value.confidence then " | confidence: \(.value.confidence)" else "" end) + "\n" +
       "- **Problem**: \(.value.problem)\n" +
       "- **Recommendation**: \(.value.recommendation)\n"
     '
@@ -109,7 +111,8 @@ REPORT_EOF
       to_entries[] |
       "### [A-\(.key + 1)] \(.value.category // "unknown") - \(.value.file):\(.value.lines // "?")\n" +
       "- **Detected by**: \(.value.detected_by | join(", "))" +
-      (if .value.high_confidence then " (high confidence)" else "" end) + "\n" +
+      (if .value.high_confidence then " (high confidence)" else "" end) +
+      (if .value.confidence then " | confidence: \(.value.confidence)" else "" end) + "\n" +
       "- **Problem**: \(.value.problem)\n" +
       "- **Recommendation**: \(.value.recommendation)\n"
     '

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2059,SC2088
 set -euo pipefail
 
 # install.sh — AI Multi Review セットアップスクリプト
@@ -96,12 +97,89 @@ for entry in "${REVIEWERS[@]}"; do
   printf "  %-14s %b  %-12s %s\n" "$name" "$status" "$default_label" "$install_hint"
 done
 
+# Codex 認証方式チェック
+if command -v codex >/dev/null 2>&1; then
+  if [[ -n "${OPENAI_API_KEY:-}" ]]; then
+    echo ""
+    log_warn "Codex CLI が APIキー認証で設定されています（従量課金）"
+    log_warn "ChatGPT Pro/Plus サブスクリプション内で利用するには:"
+    echo "  codex login"
+    echo "  （その後 OPENAI_API_KEY 環境変数を unset してください）"
+  elif [[ -f "$HOME/.codex/auth.json" ]] && grep -q "api_key" "$HOME/.codex/auth.json" 2>/dev/null; then
+    echo ""
+    log_warn "Codex CLI が APIキー認証で設定されています（従量課金の可能性）"
+    log_warn "ChatGPT Pro/Plus サブスクリプション内で利用するには:"
+    echo "  codex login"
+  fi
+fi
+
 echo ""
+if (( ${#DETECTED_REVIEWERS[@]} == 0 )); then
+  log_err "レビュアーCLIが1つも見つかりません。少なくとも1つをインストールしてください。"
+fi
+log_info "${#DETECTED_REVIEWERS[@]}/${#REVIEWERS[@]} レビュアーが利用可能"
+
+# 対話的インストール提案（対話型端末のみ）
+if [[ -t 0 ]]; then
+  NOT_INSTALLED=()
+  for entry in "${REVIEWERS[@]}"; do
+    IFS='|' read -r name cli install_cmd default_enabled <<< "$entry"
+    already_detected=false
+    for detected in "${DETECTED_REVIEWERS[@]}"; do
+      if [[ "$detected" == "$name" ]]; then
+        already_detected=true
+        break
+      fi
+    done
+    if ! $already_detected; then
+      NOT_INSTALLED+=("$entry")
+    fi
+  done
+
+  if (( ${#NOT_INSTALLED[@]} > 0 )); then
+    echo ""
+    log_info "未インストールのレビュアーCLIがあります。インストールしますか？"
+    echo ""
+    for entry in "${NOT_INSTALLED[@]}"; do
+      IFS='|' read -r name cli install_cmd default_enabled <<< "$entry"
+      printf "  ${BOLD}%s${RESET}: %s\n" "$name" "$install_cmd"
+      read -p "  Install ${name}? (y/N) " -r answer </dev/tty
+      if [[ "$answer" =~ ^[Yy]$ ]]; then
+        log_info "インストール中: ${name}"
+        # パイプを含むコマンド用の特別処理
+        case "$install_cmd" in
+          *'| sh'*)
+            # curl | sh パターン: URL を表示してから実行
+            local_url=$(echo "$install_cmd" | grep -oE 'https?://[^ |]+')
+            log_info "ダウンロード先: ${local_url}"
+            if bash -c "$install_cmd" 2>&1; then
+              log_ok "${name} をインストールしました"
+              DETECTED_REVIEWERS+=("$name")
+            else
+              log_warn "${name} のインストールに失敗しました"
+            fi
+            ;;
+          *)
+            log_info "実行: ${install_cmd}"
+            if bash -c "$install_cmd" 2>&1; then
+              log_ok "${name} をインストールしました"
+              DETECTED_REVIEWERS+=("$name")
+            else
+              log_warn "${name} のインストールに失敗しました"
+            fi
+            ;;
+        esac
+      fi
+    done
+    echo ""
+    log_info "最終検出: ${#DETECTED_REVIEWERS[@]}/${#REVIEWERS[@]} レビュアーが利用可能"
+  fi
+fi
+
 if (( ${#DETECTED_REVIEWERS[@]} == 0 )); then
   log_err "レビュアーCLIが1つも見つかりません。少なくとも1つをインストールしてください。"
   exit 1
 fi
-log_info "${#DETECTED_REVIEWERS[@]}/${#REVIEWERS[@]} レビュアーが利用可能"
 
 # ━━━ Phase 3: ~/.config symlink 設定 ━━━
 echo ""
@@ -132,22 +210,25 @@ echo ""
 BIN_DIR="$HOME/bin"
 mkdir -p "$BIN_DIR"
 
-SYMLINK="${BIN_DIR}/${TOOL_NAME}"
-TARGET="${CONFIG_DIR}/bin/${TOOL_NAME}"
+# メインコマンドと eval コマンドの symlink
+for cmd_name in "${TOOL_NAME}" "${TOOL_NAME}-eval"; do
+  local_symlink="${BIN_DIR}/${cmd_name}"
+  local_target="${CONFIG_DIR}/bin/${cmd_name}"
 
-if [[ -L "$SYMLINK" ]]; then
-  if [[ "$(readlink "$SYMLINK")" == "$TARGET" ]]; then
-    log_ok "symlink 既存: ${SYMLINK}"
+  if [[ -L "$local_symlink" ]]; then
+    if [[ "$(readlink "$local_symlink")" == "$local_target" ]]; then
+      log_ok "symlink 既存: ${local_symlink}"
+    else
+      ln -sf "$local_target" "$local_symlink"
+      log_ok "symlink 更新: ${local_symlink}"
+    fi
+  elif [[ -e "$local_symlink" ]]; then
+    log_warn "${local_symlink} がファイルとして存在します。手動で確認してください。"
   else
-    ln -sf "$TARGET" "$SYMLINK"
-    log_ok "symlink 更新: ${SYMLINK}"
+    ln -s "$local_target" "$local_symlink"
+    log_ok "symlink 作成: ${local_symlink}"
   fi
-elif [[ -e "$SYMLINK" ]]; then
-  log_warn "${SYMLINK} がファイルとして存在します。手動で確認してください。"
-else
-  ln -s "$TARGET" "$SYMLINK"
-  log_ok "symlink 作成: ${SYMLINK}"
-fi
+done
 
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
   log_warn "~/bin が PATH に含まれていません。以下を .zshrc / .bashrc に追加してください:"
@@ -216,6 +297,7 @@ echo "Phase 6: 実行権限"
 echo ""
 
 chmod +x "${CONFIG_DIR}/bin/${TOOL_NAME}" 2>/dev/null && log_ok "bin/${TOOL_NAME}"
+chmod +x "${CONFIG_DIR}/bin/${TOOL_NAME}-eval" 2>/dev/null && log_ok "bin/${TOOL_NAME}-eval"
 for f in "${CONFIG_DIR}"/reviewers/*.sh; do
   [[ -f "$f" ]] && chmod +x "$f"
 done

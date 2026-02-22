@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""ai-multi-review-eval — レビュー品質評価スクリプト
+
+issues.json と human-verdict.json から Precision / FP Rate / レビュアー別精度 / 合意率を算出。
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+
+def load_json(path: str) -> dict:
+    """JSONファイルを読み込む"""
+    with open(path) as f:
+        return json.load(f)
+
+
+def generate_template(issues_path: str, output_path: str) -> None:
+    """issues.json から human-verdict テンプレートを生成"""
+    data = load_json(issues_path)
+    issues = data.get("issues", [])
+
+    verdicts = []
+    for issue in issues:
+        verdict = {
+            "id": issue.get("id", ""),
+            "file": issue.get("file", ""),
+            "problem": issue.get("problem", "")[:100],
+            "true_positive": None,  # true / false で人間が判定
+            "comment": "",
+        }
+        verdicts.append(verdict)
+
+    template = {"verdicts": verdicts}
+
+    with open(output_path, "w") as f:
+        json.dump(template, f, indent=2, ensure_ascii=False)
+
+    print(f"テンプレートを生成しました: {output_path}", file=sys.stderr)
+    print(f"  {len(verdicts)} 件の issue について true_positive を true/false で記入してください", file=sys.stderr)
+
+
+def evaluate(issues_path: str, verdict_path: str) -> dict:
+    """Precision / FP Rate / レビュアー別精度 / 合意率を算出"""
+    issues_data = load_json(issues_path)
+    verdict_data = load_json(verdict_path)
+
+    issues = issues_data.get("issues", [])
+    verdicts = {v["id"]: v for v in verdict_data.get("verdicts", []) if v.get("true_positive") is not None}
+
+    if not verdicts:
+        print("エラー: human-verdict.json に判定済みの項目がありません", file=sys.stderr)
+        sys.exit(1)
+
+    # 全体統計
+    total = 0
+    true_positives = 0
+    false_positives = 0
+
+    # レビュアー別統計
+    reviewer_stats: dict[str, dict[str, int]] = {}
+
+    # 合意統計（複数レビュアー検出）
+    consensus_total = 0
+    consensus_tp = 0
+
+    for issue in issues:
+        issue_id = issue.get("id", "")
+        if issue_id not in verdicts:
+            continue
+
+        verdict = verdicts[issue_id]
+        is_tp = verdict["true_positive"]
+        total += 1
+
+        if is_tp:
+            true_positives += 1
+        else:
+            false_positives += 1
+
+        # レビュアー別
+        detected_by = issue.get("detected_by", [])
+        for reviewer in detected_by:
+            if reviewer not in reviewer_stats:
+                reviewer_stats[reviewer] = {"total": 0, "tp": 0, "fp": 0}
+            reviewer_stats[reviewer]["total"] += 1
+            if is_tp:
+                reviewer_stats[reviewer]["tp"] += 1
+            else:
+                reviewer_stats[reviewer]["fp"] += 1
+
+        # 合意（複数レビュアー検出 = high_confidence）
+        if len(detected_by) > 1:
+            consensus_total += 1
+            if is_tp:
+                consensus_tp += 1
+
+    # 結果計算
+    precision = true_positives / total if total > 0 else 0.0
+    fp_rate = false_positives / total if total > 0 else 0.0
+    consensus_precision = consensus_tp / consensus_total if consensus_total > 0 else 0.0
+
+    result = {
+        "summary": {
+            "total_evaluated": total,
+            "true_positives": true_positives,
+            "false_positives": false_positives,
+            "precision": round(precision, 3),
+            "fp_rate": round(fp_rate, 3),
+        },
+        "per_reviewer": {},
+        "consensus": {
+            "total": consensus_total,
+            "true_positives": consensus_tp,
+            "precision": round(consensus_precision, 3),
+        },
+    }
+
+    for reviewer, stats in sorted(reviewer_stats.items()):
+        r_precision = stats["tp"] / stats["total"] if stats["total"] > 0 else 0.0
+        result["per_reviewer"][reviewer] = {
+            "total": stats["total"],
+            "true_positives": stats["tp"],
+            "false_positives": stats["fp"],
+            "precision": round(r_precision, 3),
+        }
+
+    return result
+
+
+def print_report(result: dict) -> None:
+    """評価結果をターミナルに表示"""
+    s = result["summary"]
+    print("\n━━━ AI Multi Review — Eval Report ━━━\n")
+    print(f"  Evaluated:       {s['total_evaluated']} issues")
+    print(f"  True Positives:  {s['true_positives']}")
+    print(f"  False Positives: {s['false_positives']}")
+    print(f"  Precision:       {s['precision']:.1%}")
+    print(f"  FP Rate:         {s['fp_rate']:.1%}")
+
+    print("\n  Per-Reviewer:")
+    for reviewer, stats in result["per_reviewer"].items():
+        print(f"    {reviewer:12s}  {stats['precision']:.1%} precision  ({stats['true_positives']}/{stats['total']})")
+
+    c = result["consensus"]
+    if c["total"] > 0:
+        print(f"\n  Consensus (multi-reviewer):")
+        print(f"    {c['precision']:.1%} precision  ({c['true_positives']}/{c['total']})")
+
+    print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="ai-multi-review-eval: レビュー品質評価",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("issues", nargs="?", help="issues.json ファイルパス")
+    parser.add_argument("verdict", nargs="?", help="human-verdict.json ファイルパス")
+    parser.add_argument(
+        "--generate-template",
+        metavar="ISSUES_JSON",
+        help="issues.json からhuman-verdict テンプレートを生成",
+    )
+    parser.add_argument(
+        "--output", "-o",
+        default="human-verdict.json",
+        help="テンプレート出力先 (default: human-verdict.json)",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="結果をJSON形式で出力",
+    )
+
+    args = parser.parse_args()
+
+    if args.generate_template:
+        generate_template(args.generate_template, args.output)
+        return
+
+    if not args.issues or not args.verdict:
+        parser.print_help()
+        print("\nUsage examples:", file=sys.stderr)
+        print("  ai-multi-review-eval issues.json human-verdict.json", file=sys.stderr)
+        print("  ai-multi-review-eval --generate-template issues.json -o verdict.json", file=sys.stderr)
+        sys.exit(1)
+
+    result = evaluate(args.issues, args.verdict)
+
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print_report(result)
+        # JSON も stderr に出力（パイプ連携用）
+        print(json.dumps(result, indent=2, ensure_ascii=False), file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

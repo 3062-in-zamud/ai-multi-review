@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034,SC2016
 # gemini.sh — Gemini CLI reviewer adapter
 
 reviewer_name="gemini"
@@ -9,7 +10,6 @@ check_available() {
 
 run_review() {
   local diff_file="$1" out_file="$2"
-  local prompt_dir="${CONFIG_DIR}/prompts"
   local log_dir="${CONFIG_DIR}/logs"
   mkdir -p "$log_dir"
   local raw_file="${log_dir}/gemini_raw.txt"
@@ -18,11 +18,9 @@ run_review() {
   # Gemini CLI: positional prompt で呼び出し（-p/--prompt は deprecated）
   # stdin との併用不可のため、全プロンプトを1つの引数に結合
   gemini --sandbox \
-    "$(cat "${prompt_dir}/review-system.md")
+    "$(build_system_prompt)
 
-$(cat "${prompt_dir}/review-user.md")
-
-$(cat "$diff_file")" \
+$(build_user_prompt "$diff_file")" \
     > "$raw_file" 2>"$stderr_file"
 
   # Gemini は構造化出力を保証しないため、JSON抽出を試みる
