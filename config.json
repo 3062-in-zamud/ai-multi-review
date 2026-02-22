@@ -1,0 +1,29 @@
+{
+  "reviewers": {
+    "coderabbit": {
+      "enabled": true,
+      "timeout": 180
+    },
+    "claude": {
+      "enabled": true,
+      "timeout": 300,
+      "model": "sonnet",
+      "max_budget_usd": 0.50
+    },
+    "codex": {
+      "enabled": true,
+      "timeout": 300
+    }
+  },
+  "defaults": {
+    "base_ref": "main"
+  },
+  "merge": {
+    "dedup_line_range": 5
+  },
+  "report": {
+    "keep_history": 10,
+    "naming": "{project}_{branch}_{YYYYMMDD}_{HHmmss}",
+    "group_by": "project"
+  }
+}

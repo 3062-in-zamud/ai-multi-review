@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "properties": {
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["blocking", "advisory"]
+          },
+          "category": {
+            "type": "string",
+            "enum": ["security", "correctness", "perf", "maintainability", "testing", "style"]
+          },
+          "file": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "recommendation": {
+            "type": "string"
+          }
+        },
+        "required": ["severity", "file", "problem", "recommendation"]
+      }
+    }
+  },
+  "required": ["issues"]
+}

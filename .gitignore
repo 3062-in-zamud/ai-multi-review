@@ -1,0 +1,6 @@
+# Runtime outputs
+logs/
+reports/
+
+# OS
+.DS_Store

@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# triple-review — Pre-PR Triple Review System
+# CodeRabbit, Claude CLI, Codex CLI で並列レビューし統合レポートを生成
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/triple-review"
+
+# ━━━ 共通ライブラリ読み込み ━━━
+source "${CONFIG_DIR}/lib/common.sh"
+source "${CONFIG_DIR}/lib/merge.sh"
+source "${CONFIG_DIR}/lib/report.sh"
+
+# ━━━ ヘルプ ━━━
+show_help() {
+  cat <<'HELP'
+Usage: triple-review [OPTIONS] [BASE_BRANCH]
+
+Pre-PR Triple Review: CodeRabbit, Claude, Codex で並列コードレビュー
+
+Arguments:
+  BASE_BRANCH              ベースブランチ (default: config.json の defaults.base_ref)
+
+Options:
+  --base <branch>          ベースブランチを明示的に指定
+  --reviewers <list>       使用するレビュアー (カンマ区切り: claude,codex,coderabbit)
+  --no-block               blocking判定を無効化 (常に exit 0)
+  --output <path>          レポート出力先を指定
+  --help                   このヘルプを表示
+
+Diff Detection (automatic):
+  1. commit diff (BASE...HEAD)         コミット済み差分を優先
+  2. staged changes (git add 済み)      コミット差分がなければステージ済み
+  3. unstaged changes                   上記もなければ未ステージ変更
+
+Examples:
+  triple-review                        # main との差分をレビュー
+  triple-review develop                # develop との差分
+  triple-review --reviewers claude     # Claude のみ
+  triple-review --no-block             # blocking でも exit 0
+HELP
+  exit 0
+}
+
+# ━━━ 引数パース ━━━
+BASE_REF=""
+REVIEWER_FILTER=""
+NO_BLOCK=false
+OUTPUT_PATH=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --base)       BASE_REF="$2"; shift 2 ;;
+    --reviewers)  REVIEWER_FILTER="$2"; shift 2 ;;
+    --no-block)   NO_BLOCK=true; shift ;;
+    --output)     OUTPUT_PATH="$2"; shift 2 ;;
+    --help|-h)    show_help ;;
+    -*)           die "不明なオプション: $1（--help で使い方を確認）" ;;
+    *)            BASE_REF="$1"; shift ;;
+  esac
+done
+
+# ━━━ [1] 初期化 ━━━
+require_git_repo
+BASE_REF="${BASE_REF:-$(config_get '.defaults.base_ref' 'main')}"
+PROJECT=$(get_project_name)
+BRANCH=$(get_branch_name)
+
+# diff モード判定（コミット差分 → ステージ済み → 未ステージ の優先順）
+detect_diff_mode "$BASE_REF"
+if [[ "$DIFF_MODE" == "none" ]]; then
+  log_info "差分がありません（${BRANCH} vs ${BASE_REF}）。レビュー不要です。"
+  exit 0
+fi
+
+# ━━━ [2] diff取得 & 規模表示 ━━━
+TMPWORK=$(mktemp -d)
+PIDS=()
+cleanup() {
+  for pid in "${PIDS[@]:-}"; do
+    kill "$pid" 2>/dev/null || true
+  done
+  wait 2>/dev/null
+  rm -rf "$TMPWORK"
+}
+trap cleanup EXIT INT TERM
+
+DIFF_FILE="${TMPWORK}/diff.patch"
+get_diff "$BASE_REF" > "$DIFF_FILE"
+
+read -r FILES ADDED REMOVED <<< "$(get_diff_numstat "$BASE_REF")"
+
+DIFF_LABEL=$(get_diff_mode_label "$BASE_REF")
+log_info "Repo: ${PROJECT} | Branch: ${BRANCH} → ${BASE_REF}"
+log_info "Mode: ${DIFF_LABEL}"
+log_info "Files: ${FILES} | Lines: +${ADDED}/-${REMOVED}"
+
+DIFF_LINES=$(wc -l < "$DIFF_FILE" | tr -d ' ')
+if (( DIFF_LINES > 1000 )); then
+  log_warn "大きなdiff（${DIFF_LINES}行）。レビュー時間が長くなる可能性があります。"
+fi
+
+# ━━━ [3] 並列レビュー実行 ━━━
+REVIEWERS=$(get_enabled_reviewers "$REVIEWER_FILTER")
+if [[ -z "$REVIEWERS" ]]; then
+  die "有効なレビュアーがありません。config.json または --reviewers を確認してください。"
+fi
+
+RESULT_DIR="${TMPWORK}/results"
+STATUS_DIR="${TMPWORK}/status"
+mkdir -p "$RESULT_DIR" "$STATUS_DIR"
+
+PIDS=()
+REVIEWER_LIST=()
+
+for reviewer in $REVIEWERS; do
+  reviewer_script="${CONFIG_DIR}/reviewers/${reviewer}.sh"
+  if [[ ! -f "$reviewer_script" ]]; then
+    log_warn "レビュアースクリプトが見つかりません: ${reviewer}"
+    echo "skipped" > "${STATUS_DIR}/${reviewer}"
+    continue
+  fi
+
+  # B-4: サブシェル内でsourceして名前空間汚染を防止
+  if ! ( source "${CONFIG_DIR}/lib/common.sh" && source "$reviewer_script" && check_available ); then
+    log_warn "${reviewer}: CLI未インストール（スキップ）"
+    echo "skipped" > "${STATUS_DIR}/${reviewer}"
+    echo '{"issues":[]}' > "${RESULT_DIR}/${reviewer}.json"
+    continue
+  fi
+
+  REVIEWER_LIST+=("$reviewer")
+  timeout_sec=$(get_reviewer_timeout "$reviewer")
+
+  # B-10: サブシェル内で実行、exit code 124 でタイムアウト判定
+  (
+    set -euo pipefail
+    source "${CONFIG_DIR}/lib/common.sh"
+    source "$reviewer_script"
+    printf "  [%d/%d] %-12s: running...\r" "${#REVIEWER_LIST[@]}" "$(echo "$REVIEWERS" | wc -w | tr -d ' ')" "$reviewer" >&2
+
+    if run_with_timeout "$timeout_sec" run_review "${DIFF_FILE}" "${RESULT_DIR}/${reviewer}.json"; then
+      echo "completed" > "${STATUS_DIR}/${reviewer}"
+    else
+      rc=$?
+      [[ ! -s "${RESULT_DIR}/${reviewer}.json" ]] && echo '{"issues":[]}' > "${RESULT_DIR}/${reviewer}.json"
+      if (( rc == 124 )); then
+        echo "timeout" > "${STATUS_DIR}/${reviewer}"
+      else
+        echo "error" > "${STATUS_DIR}/${reviewer}"
+      fi
+    fi
+  ) &
+  PIDS+=($!)
+done
+
+# 全レビュアーの完了を待機
+for pid in "${PIDS[@]}"; do
+  wait "$pid" 2>/dev/null || true
+done
+
+# ステータスが設定されていないものをerrorに
+for reviewer in "${REVIEWER_LIST[@]}"; do
+  if [[ ! -f "${STATUS_DIR}/${reviewer}" ]]; then
+    echo "error" > "${STATUS_DIR}/${reviewer}"
+    echo '{"issues":[]}' > "${RESULT_DIR}/${reviewer}.json"
+  fi
+done
+
+# 全ツール失敗チェック
+ALL_FAILED=true
+for reviewer in $REVIEWERS; do
+  status=$(cat "${STATUS_DIR}/${reviewer}" 2>/dev/null || echo "skipped")
+  if [[ "$status" == "completed" ]]; then
+    ALL_FAILED=false
+    break
+  fi
+done
+
+if $ALL_FAILED; then
+  log_error "全レビュアーが失敗しました。手動レビューを推奨します。"
+  exit 2
+fi
+
+# ━━━ [4] 結果統合 → レポート生成 ━━━
+MERGED_JSON=$(merge_results "$RESULT_DIR")
+
+# レビュアーステータス文字列を生成
+REVIEWER_STATUSES=""
+for reviewer in $REVIEWERS; do
+  local_status=$(cat "${STATUS_DIR}/${reviewer}" 2>/dev/null || echo "skipped")
+  local_blocking=$(echo "$MERGED_JSON" | jq --arg r "$reviewer" '[(.issues // [])[] | select(.detected_by[]? == $r) | select(.severity == "blocking")] | length')
+  local_advisory=$(echo "$MERGED_JSON" | jq --arg r "$reviewer" '[(.issues // [])[] | select(.detected_by[]? == $r) | select(.severity == "advisory")] | length')
+  REVIEWER_STATUSES="${REVIEWER_STATUSES}${reviewer}:${local_status}:${local_blocking}:${local_advisory}
+"
+done
+
+# レポート保存
+REPORT_DIR=$(get_report_dir)
+mkdir -p "$REPORT_DIR"
+REPORT_NAME=$(get_report_name)
+
+if [[ -n "$OUTPUT_PATH" ]]; then
+  REPORT_PATH="$OUTPUT_PATH"
+  ISSUES_PATH="${OUTPUT_PATH%.md}.issues.json"
+else
+  REPORT_PATH="${REPORT_DIR}/${REPORT_NAME}.md"
+  ISSUES_PATH="${REPORT_DIR}/${REPORT_NAME}.issues.json"
+fi
+
+generate_markdown_report "$REPORT_NAME" "$PROJECT" "$BRANCH" "$BASE_REF" \
+  "$FILES" "$ADDED" "$REMOVED" "$MERGED_JSON" "$REVIEWER_STATUSES" > "$REPORT_PATH"
+
+generate_issues_json "$MERGED_JSON" > "$ISSUES_PATH"
+
+# latest symlink更新
+if [[ -z "$OUTPUT_PATH" ]]; then
+  update_latest_symlink "$REPORT_DIR" "$REPORT_NAME"
+  rotate_reports "$REPORT_DIR"
+fi
+
+# ━━━ [5] ターミナル表示 & 判定 ━━━
+print_terminal_summary "$PROJECT" "$BRANCH" "$BASE_REF" \
+  "$FILES" "$ADDED" "$REMOVED" "$REPORT_PATH" "$ISSUES_PATH" \
+  "$MERGED_JSON" "$REVIEWER_STATUSES"
+
+read -r BLOCKING _ <<< "$(get_stats "$MERGED_JSON")"
+
+if (( BLOCKING > 0 )) && ! $NO_BLOCK; then
+  exit 1
+else
+  exit 0
+fi
