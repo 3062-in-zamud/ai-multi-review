@@ -14,7 +14,7 @@ print_terminal_summary() {
   local blocking advisory
   read -r blocking advisory <<< "$(get_stats "$merged_json")"
 
-  printf "\n${BOLD}━━━ Triple Review ━━━━━━━━━━━━━━━━━━━${RESET}\n"
+  printf "\n${BOLD}━━━ AI Multi Review ━━━━━━━━━━━━━━━━━━${RESET}\n"
   printf "Repo: ${CYAN}%s${RESET} | Branch: ${CYAN}%s${RESET} → ${CYAN}%s${RESET}\n" "$project" "$branch" "$base_ref"
   printf "Files: ${BOLD}%s${RESET} | Lines: ${GREEN}+%s${RESET}/${RED}-%s${RESET}\n\n" "$files" "$added" "$removed"
 
@@ -71,7 +71,7 @@ generate_markdown_report() {
   fi
 
   cat <<REPORT_EOF
-# Triple Review Report
+# AI Multi Review Report
 - **Report**: \`${report_name}\`
 - **Date**: ${date_str}
 - **Repo**: ${project}

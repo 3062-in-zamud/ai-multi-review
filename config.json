@@ -13,6 +13,22 @@
     "codex": {
       "enabled": true,
       "timeout": 300
+    },
+    "gemini": {
+      "enabled": false,
+      "timeout": 300
+    },
+    "aider": {
+      "enabled": false,
+      "timeout": 300
+    },
+    "opencode": {
+      "enabled": false,
+      "timeout": 300
+    },
+    "gh-copilot": {
+      "enabled": false,
+      "timeout": 300
     }
   },
   "defaults": {

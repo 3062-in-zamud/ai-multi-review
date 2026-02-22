@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# common.sh — triple-review 共通関数
+# common.sh — ai-multi-review 共通関数
 
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/triple-review"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ai-multi-review"
 CONFIG_FILE="${CONFIG_DIR}/config.json"
 
 # 色定義

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# triple-review — Pre-PR Triple Review System
-# CodeRabbit, Claude CLI, Codex CLI で並列レビューし統合レポートを生成
+# ai-multi-review — Pre-PR Multi-LLM Code Review System
+# 複数のLLM CLIで並列コードレビューし統合レポートを生成
 
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/triple-review"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ai-multi-review"
 
 # ━━━ 共通ライブラリ読み込み ━━━
 source "${CONFIG_DIR}/lib/common.sh"
@@ -14,9 +14,9 @@ source "${CONFIG_DIR}/lib/report.sh"
 # ━━━ ヘルプ ━━━
 show_help() {
   cat <<'HELP'
-Usage: triple-review [OPTIONS] [BASE_BRANCH]
+Usage: ai-multi-review [OPTIONS] [BASE_BRANCH]
 
-Pre-PR Triple Review: CodeRabbit, Claude, Codex で並列コードレビュー
+Pre-PR Multi-LLM Review: 複数のLLM CLIで並列コードレビュー
 
 Arguments:
   BASE_BRANCH              ベースブランチ (default: config.json の defaults.base_ref)
@@ -34,10 +34,10 @@ Diff Detection (automatic):
   3. unstaged changes                   上記もなければ未ステージ変更
 
 Examples:
-  triple-review                        # main との差分をレビュー
-  triple-review develop                # develop との差分
-  triple-review --reviewers claude     # Claude のみ
-  triple-review --no-block             # blocking でも exit 0
+  ai-multi-review                      # main との差分をレビュー
+  ai-multi-review develop              # develop との差分
+  ai-multi-review --reviewers claude   # Claude のみ
+  ai-multi-review --no-block           # blocking でも exit 0
 HELP
   exit 0
 }

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# install.sh — Triple Review System セットアップスクリプト
-# Usage: bash ~/.config/triple-review/install.sh
+# install.sh — AI Multi Review セットアップスクリプト
+# Usage: bash ~/.config/ai-multi-review/install.sh
 
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/triple-review"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ai-multi-review"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -19,7 +19,7 @@ log_info() { printf "${CYAN}[i]${RESET} %s\n" "$*"; }
 log_err()  { printf "${RED}[✗]${RESET} %s\n" "$*"; }
 
 echo ""
-printf "${BOLD}━━━ Triple Review System — Setup ━━━${RESET}\n\n"
+printf "${BOLD}━━━ AI Multi Review — Setup ━━━${RESET}\n\n"
 
 # ━━━ 1. 必須コマンド確認 ━━━
 echo "📋 必須ツール確認..."
@@ -90,8 +90,8 @@ echo "🔗 PATH設定..."
 BIN_DIR="$HOME/bin"
 mkdir -p "$BIN_DIR"
 
-SYMLINK="${BIN_DIR}/triple-review"
-TARGET="${CONFIG_DIR}/bin/triple-review"
+SYMLINK="${BIN_DIR}/ai-multi-review"
+TARGET="${CONFIG_DIR}/bin/ai-multi-review"
 
 if [[ -L "$SYMLINK" ]]; then
   if [[ "$(readlink "$SYMLINK")" == "$TARGET" ]]; then
@@ -120,8 +120,8 @@ echo "🔗 Claude Code コマンド設定..."
 CLAUDE_CMD_DIR="$HOME/.claude/commands"
 mkdir -p "$CLAUDE_CMD_DIR"
 
-# triple-review.md と fix-review.md が存在するか確認
-for cmd_file in triple-review.md fix-review.md; do
+# ai-multi-review.md と fix-review.md が存在するか確認
+for cmd_file in ai-multi-review.md fix-review.md; do
   if [[ -f "${CLAUDE_CMD_DIR}/${cmd_file}" ]]; then
     log_ok "${cmd_file} 既存"
   else
@@ -140,16 +140,16 @@ else
 fi
 
 # ━━━ 7. 実行権限 ━━━
-chmod +x "${CONFIG_DIR}/bin/triple-review" 2>/dev/null && log_ok "実行権限設定"
+chmod +x "${CONFIG_DIR}/bin/ai-multi-review" 2>/dev/null && log_ok "実行権限設定"
 
 # ━━━ 完了 ━━━
 echo ""
 printf "${BOLD}━━━ セットアップ完了 ━━━${RESET}\n\n"
 echo "使い方:"
-echo "  triple-review                  # git リポジトリ内で実行"
-echo "  triple-review --help           # ヘルプ表示"
+echo "  ai-multi-review                  # git リポジトリ内で実行"
+echo "  ai-multi-review --help           # ヘルプ表示"
 echo ""
 echo "Claude Code から:"
-echo "  /triple-review                 # レビュー実行"
+echo "  /ai-multi-review                 # レビュー実行"
 echo "  /fix-review latest             # 最新レポートの修正"
 echo ""
