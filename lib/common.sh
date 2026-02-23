@@ -24,6 +24,17 @@ log_error()   { printf "${RED}[error]${RESET} %s\n" "$*" >&2; }
 
 die() { log_error "$@"; exit 1; }
 
+# $HOME を ~ に置換してパスを短縮
+shorten_path() {
+  local p="$1"
+  echo "${p/#$HOME/~}"
+}
+
+# stderr が TTY かチェック（CI 環境フォールバック用）
+is_tty() {
+  [[ -t 2 ]]
+}
+
 # config.json からキーを取得（jq 必須）
 config_get() {
   local key="$1" default="${2:-}"

@@ -11,6 +11,7 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ai-multi-review"
 source "${CONFIG_DIR}/lib/common.sh"
 source "${CONFIG_DIR}/lib/merge.sh"
 source "${CONFIG_DIR}/lib/report.sh"
+source "${CONFIG_DIR}/lib/progress.sh"
 
 # ━━━ ヘルプ ━━━
 show_help() {
@@ -106,15 +107,10 @@ get_diff "$BASE_REF" > "$DIFF_FILE"
 
 read -r FILES ADDED REMOVED <<< "$(get_diff_numstat "$BASE_REF")"
 
-DIFF_LABEL=$(get_diff_mode_label "$BASE_REF")
-log_info "Repo: ${PROJECT} | Branch: ${BRANCH} → ${BASE_REF}"
-log_info "Mode: ${DIFF_LABEL}"
-log_info "Files: ${FILES} | Lines: +${ADDED}/-${REMOVED}"
-
 DIFF_LINES=$(wc -l < "$DIFF_FILE" | tr -d ' ')
-if (( DIFF_LINES > 1000 )); then
-  log_warn "大きなdiff（${DIFF_LINES}行）。レビュー時間が長くなる可能性があります。"
-fi
+TOTAL_START_TIME=$(date +%s)
+
+print_header "$PROJECT" "$BRANCH" "$BASE_REF" "$FILES" "$ADDED" "$REMOVED" "$DIFF_MODE" "$DIFF_LINES"
 
 # ━━━ [2.5] dry-run モード ━━━
 if $DRY_RUN; then
@@ -162,13 +158,27 @@ for reviewer in $REVIEWERS; do
     set -euo pipefail
     source "${CONFIG_DIR}/lib/common.sh"
     source "$reviewer_script"
-    printf "  [%d/%d] %-12s: running...\r" "${#REVIEWER_LIST[@]}" "$(echo "$REVIEWERS" | wc -w | tr -d ' ')" "$reviewer" >&2
+
+    echo "running" > "${STATUS_DIR}/${reviewer}"
+    date +%s > "${STATUS_DIR}/${reviewer}.start"
 
     if run_with_timeout "$timeout_sec" run_review "${DIFF_FILE}" "${RESULT_DIR}/${reviewer}.json"; then
+      date +%s > "${STATUS_DIR}/${reviewer}.end"
+      # プログレス表示用に件数を書き出し
+      if [[ -s "${RESULT_DIR}/${reviewer}.json" ]] && jq empty "${RESULT_DIR}/${reviewer}.json" 2>/dev/null; then
+        jq '[(.issues // [])[] | select(.severity == "blocking")] | length' "${RESULT_DIR}/${reviewer}.json" > "${STATUS_DIR}/${reviewer}.blocking" 2>/dev/null || echo "0" > "${STATUS_DIR}/${reviewer}.blocking"
+        jq '[(.issues // [])[] | select(.severity == "advisory")] | length' "${RESULT_DIR}/${reviewer}.json" > "${STATUS_DIR}/${reviewer}.advisory" 2>/dev/null || echo "0" > "${STATUS_DIR}/${reviewer}.advisory"
+      else
+        echo "0" > "${STATUS_DIR}/${reviewer}.blocking"
+        echo "0" > "${STATUS_DIR}/${reviewer}.advisory"
+      fi
       echo "completed" > "${STATUS_DIR}/${reviewer}"
     else
       rc=$?
+      date +%s > "${STATUS_DIR}/${reviewer}.end"
       [[ ! -s "${RESULT_DIR}/${reviewer}.json" ]] && echo '{"issues":[]}' > "${RESULT_DIR}/${reviewer}.json"
+      echo "0" > "${STATUS_DIR}/${reviewer}.blocking"
+      echo "0" > "${STATUS_DIR}/${reviewer}.advisory"
       if (( rc == 124 )); then
         echo "timeout" > "${STATUS_DIR}/${reviewer}"
       else
@@ -179,10 +189,10 @@ for reviewer in $REVIEWERS; do
   PIDS+=($!)
 done
 
-# 全レビュアーの完了を待機
-for pid in "${PIDS[@]}"; do
-  wait "$pid" 2>/dev/null || true
-done
+# ライブプログレス表示 & 全レビュアーの完了を待機
+PID_LIST=$(IFS=':'; echo "${PIDS[*]}")
+REVIEWER_LIST_STR=$(IFS=':'; echo "${REVIEWER_LIST[*]}")
+monitor_loop "$STATUS_DIR" "$PID_LIST" "$REVIEWER_LIST_STR"
 
 # ステータスが設定されていないものをerrorに
 for reviewer in "${REVIEWER_LIST[@]}"; do
@@ -247,7 +257,7 @@ fi
 # ━━━ [5] ターミナル表示 & 判定 ━━━
 print_terminal_summary "$PROJECT" "$BRANCH" "$BASE_REF" \
   "$FILES" "$ADDED" "$REMOVED" "$REPORT_PATH" "$ISSUES_PATH" \
-  "$MERGED_JSON" "$REVIEWER_STATUSES"
+  "$MERGED_JSON" "$REVIEWER_STATUSES" "$STATUS_DIR" "$TOTAL_START_TIME"
 
 read -r BLOCKING _ <<< "$(get_stats "$MERGED_JSON")"
 

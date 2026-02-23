@@ -1,54 +1,106 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2059
+# shellcheck disable=SC2059,SC2034
 # report.sh — レビューレポート生成（ターミナル表示 + Markdownファイル）
 
 # ターミナルにサマリーを表示
+# レビュアーテーブルはプログレス表示で既出のため、ここでは verdict 以降のみ
 print_terminal_summary() {
   local project="$1" branch="$2" base_ref="$3"
   local files="$4" added="$5" removed="$6"
   local report_path="$7" issues_path="$8"
   local merged_json="$9"
   shift 9
-  # $1=reviewer_statuses (reviewer:status:blocking:advisory 形式、改行区切り)
   local reviewer_statuses="$1"
+  local status_dir="${2:-}"
+  local total_start_time="${3:-}"
 
   local blocking advisory
   read -r blocking advisory <<< "$(get_stats "$merged_json")"
 
-  printf "\n${BOLD}━━━ AI Multi Review ━━━━━━━━━━━━━━━━━━${RESET}\n"
-  printf "Repo: ${CYAN}%s${RESET} | Branch: ${CYAN}%s${RESET} → ${CYAN}%s${RESET}\n" "$project" "$branch" "$base_ref"
-  printf "Files: ${BOLD}%s${RESET} | Lines: ${GREEN}+%s${RESET}/${RED}-%s${RESET}\n\n" "$files" "$added" "$removed"
+  local bar="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-  # 各レビュアーの状態
-  while IFS=: read -r name status r_blocking r_advisory; do
-    [[ -z "$name" ]] && continue
-    local icon
-    case "$status" in
-      completed) icon="${GREEN}✅${RESET}" ;;
-      skipped)   icon="${DIM}⏭️${RESET}" ;;
-      timeout)   icon="${YELLOW}⏰${RESET}" ;;
-      error)     icon="${RED}❌${RESET}" ;;
-    esac
-    printf "  %-12s %b %s blocking, %s advisory\n" "$name" "$icon" "${r_blocking:-0}" "${r_advisory:-0}"
-  done <<< "$reviewer_statuses"
-
-  printf "\n"
-
-  if (( blocking > 0 )); then
-    printf "Verdict: ${RED}⚠️  %d blocking issue(s)${RESET} (deduplicated)\n" "$blocking"
+  if is_tty; then
+    printf "${BOLD}%s${RESET}\n\n" "$bar" >&2
   else
-    printf "Verdict: ${GREEN}✅ No blocking issues${RESET}\n"
+    printf "----------------------------------------------\n\n" >&2
   fi
 
-  printf "Report: ${DIM}%s${RESET}\n" "$report_path"
-  printf "Issues: ${DIM}%s${RESET}\n\n" "$issues_path"
+  # Verdict
+  if (( blocking > 0 )); then
+    if is_tty; then
+      printf "  ${YELLOW}⚠️  Verdict: %d blocking issue(s)${RESET} (deduplicated)\n" "$blocking" >&2
+    else
+      printf "  Warning: %d blocking issue(s) (deduplicated)\n" "$blocking" >&2
+    fi
+  else
+    if is_tty; then
+      printf "  ${GREEN}✅ Verdict: No blocking issues${RESET}\n" >&2
+    else
+      printf "  OK: No blocking issues\n" >&2
+    fi
+  fi
+
+  printf "\n" >&2
+
+  # Blocking issues プレビュー（最大3件）
+  if (( blocking > 0 )); then
+    local preview
+    preview=$(echo "$merged_json" | jq -r '
+      [.issues[] | select(.severity == "blocking")] |
+      to_entries | .[0:3][] |
+      "  B-\(.key + 1)  \(.value.category // "unknown") · \(.value.file):\(.value.lines // "?")\n       \(.value.problem // "" | .[0:80])"
+    ' 2>/dev/null)
+
+    if [[ -n "$preview" ]]; then
+      printf "%s\n" "$preview" >&2
+      if (( blocking > 3 )); then
+        printf "  ... and %d more\n" "$(( blocking - 3 ))" >&2
+      fi
+      printf "\n" >&2
+    fi
+  fi
+
+  # Report / Fix パス
+  local short_report
+  short_report=$(shorten_path "$report_path")
+
+  if is_tty; then
+    printf "  Report  ${DIM}%s${RESET}\n" "$short_report" >&2
+  else
+    printf "  Report  %s\n" "$short_report" >&2
+  fi
 
   if (( blocking > 0 )); then
-    printf "Fix(Claude): ${CYAN}/fix-review latest${RESET}\n"
-    printf "Fix(Codex):  ${CYAN}codex exec \"\$(cat ~/.codex/instructions/fix-review.md) \$(cat %s)\"${RESET}\n" "$issues_path"
+    if is_tty; then
+      printf "  Fix     ${CYAN}/fix-review latest${RESET}  ← blocking issues を自動修正\n" >&2
+    else
+      printf "  Fix     /fix-review latest  <- blocking issues を自動修正\n" >&2
+    fi
   fi
 
-  printf "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n\n"
+  printf "\n" >&2
+
+  # フッター罫線 + Total
+  local total_elapsed=""
+  if [[ -n "$total_start_time" ]]; then
+    local now
+    now=$(date +%s)
+    total_elapsed="Total: $(( now - total_start_time ))s"
+  fi
+
+  if is_tty; then
+    printf "${BOLD}%s${RESET}\n" "$bar" >&2
+    if [[ -n "$total_elapsed" ]]; then
+      printf "%*s\n" 46 "$total_elapsed" >&2
+    fi
+  else
+    printf "----------------------------------------------\n" >&2
+    if [[ -n "$total_elapsed" ]]; then
+      printf "%*s\n" 46 "$total_elapsed" >&2
+    fi
+  fi
+
+  printf "\n" >&2
 }
 
 # Markdownレポートを生成

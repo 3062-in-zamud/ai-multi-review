@@ -210,7 +210,7 @@ echo ""
 BIN_DIR="$HOME/bin"
 mkdir -p "$BIN_DIR"
 
-# メインコマンドと eval コマンドの symlink
+# メインコマンド、短縮エイリアス、eval コマンドの symlink
 for cmd_name in "${TOOL_NAME}" "${TOOL_NAME}-eval"; do
   local_symlink="${BIN_DIR}/${cmd_name}"
   local_target="${CONFIG_DIR}/bin/${cmd_name}"
@@ -229,6 +229,23 @@ for cmd_name in "${TOOL_NAME}" "${TOOL_NAME}-eval"; do
     log_ok "symlink 作成: ${local_symlink}"
   fi
 done
+
+# amr 短縮エイリアス → ai-multi-review
+local_amr="${BIN_DIR}/amr"
+local_amr_target="${CONFIG_DIR}/bin/${TOOL_NAME}"
+if [[ -L "$local_amr" ]]; then
+  if [[ "$(readlink "$local_amr")" == "$local_amr_target" ]]; then
+    log_ok "symlink 既存: ${local_amr} (短縮エイリアス)"
+  else
+    ln -sf "$local_amr_target" "$local_amr"
+    log_ok "symlink 更新: ${local_amr} (短縮エイリアス)"
+  fi
+elif [[ -e "$local_amr" ]]; then
+  log_warn "${local_amr} が既に存在します。amr エイリアスをスキップします。"
+else
+  ln -s "$local_amr_target" "$local_amr"
+  log_ok "symlink 作成: ${local_amr} → ai-multi-review (短縮エイリアス)"
+fi
 
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
   log_warn "~/bin が PATH に含まれていません。以下を .zshrc / .bashrc に追加してください:"
@@ -429,9 +446,9 @@ done
 
 echo ""
 echo "使い方:"
-echo "  ${TOOL_NAME}                      # git リポジトリ内で実行"
-echo "  ${TOOL_NAME} --help               # ヘルプ表示"
-echo "  ${TOOL_NAME} --reviewers claude    # 特定レビュアーのみ"
+echo "  amr                               # ai-multi-review の短縮コマンド"
+echo "  amr --help                        # ヘルプ表示"
+echo "  amr --reviewers claude            # 特定レビュアーのみ"
 echo ""
 echo "Claude Code から:"
 echo "  /${TOOL_NAME}                     # レビュー実行"
