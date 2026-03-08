@@ -1,7 +1,13 @@
+<p align="center">
+  <img src="docs/logo.png" alt="ai-multi-review logo" width="300">
+</p>
+
 # ai-multi-review
 
-[![Version](https://img.shields.io/badge/version-v0.1.0-blue)](https://github.com/3062-in-zamud/ai-multi-review/releases)
+[![Version](https://img.shields.io/github/v/release/3062-in-zamud/ai-multi-review?color=blue&label=version)](https://github.com/3062-in-zamud/ai-multi-review/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/3062-in-zamud/ai-multi-review/ci.yml?label=CI)](https://github.com/3062-in-zamud/ai-multi-review/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Shell](https://img.shields.io/badge/shell-bash-green)](bin/ai-multi-review)
 
 🇯🇵 [日本語版はこちら](README.ja.md)
 
