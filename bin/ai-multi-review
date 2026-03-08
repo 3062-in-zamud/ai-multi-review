@@ -13,6 +13,14 @@ source "${CONFIG_DIR}/lib/merge.sh"
 source "${CONFIG_DIR}/lib/report.sh"
 source "${CONFIG_DIR}/lib/progress.sh"
 
+# ━━━ バージョン ━━━
+show_version() {
+  local version
+  version=$(cat "${CONFIG_DIR}/VERSION" 2>/dev/null || echo "unknown")
+  echo "ai-multi-review ${version}"
+  exit 0
+}
+
 # ━━━ ヘルプ ━━━
 show_help() {
   cat <<'HELP'
@@ -31,6 +39,7 @@ Options:
   --context <text>         レビューコンテキスト情報 (PR説明、チケット番号等)
   --context-file <path>    コンテキスト情報をファイルから読み込み
   --dry-run                LLM呼び出しなしでプロンプト全文を表示
+  --version, -V            バージョンを表示
   --help                   このヘルプを表示
 
 Diff Detection (automatic):
@@ -67,6 +76,7 @@ while [[ $# -gt 0 ]]; do
     --context)       REVIEW_CONTEXT="$2"; shift 2 ;;
     --context-file)  REVIEW_CONTEXT_FILE="$2"; shift 2 ;;
     --dry-run)       DRY_RUN=true; shift ;;
+    --version|-V)    show_version ;;
     --help|-h)       show_help ;;
     -*)              die "不明なオプション: $1（--help で使い方を確認）" ;;
     *)               BASE_REF="$1"; shift ;;
