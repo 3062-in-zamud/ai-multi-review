@@ -1,0 +1,22 @@
+{
+  "issues": [
+    {
+      "severity": "blocking",
+      "category": "xss",
+      "file": "src/render.ts",
+      "lines": "42-42",
+      "problem": "innerHTML usage detected",
+      "recommendation": "Use DOMPurify",
+      "confidence": "high"
+    },
+    {
+      "severity": "advisory",
+      "category": "xss",
+      "file": "src/render.ts",
+      "lines": "44-44",
+      "problem": "innerHTML usage detected (near duplicate)",
+      "recommendation": "Use DOMPurify sanitize",
+      "confidence": "medium"
+    }
+  ]
+}

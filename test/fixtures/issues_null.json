@@ -1,0 +1,22 @@
+{
+  "issues": [
+    {
+      "severity": "advisory",
+      "category": null,
+      "file": null,
+      "lines": "5-5",
+      "problem": "Issue with null file",
+      "recommendation": "Fix it",
+      "confidence": "low"
+    },
+    {
+      "severity": "advisory",
+      "category": "style",
+      "file": "src/valid.ts",
+      "lines": "20-20",
+      "problem": "Valid issue",
+      "recommendation": "Fix it too",
+      "confidence": "medium"
+    }
+  ]
+}

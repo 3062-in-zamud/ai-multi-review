@@ -1,0 +1,13 @@
+{
+  "issues": [
+    {
+      "severity": "blocking",
+      "category": "secrets",
+      "file": "src/config.ts",
+      "lines": "10-10",
+      "problem": "Hardcoded API key found",
+      "recommendation": "Use environment variable instead",
+      "confidence": "high"
+    }
+  ]
+}

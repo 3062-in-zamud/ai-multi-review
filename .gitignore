@@ -9,3 +9,5 @@ knowledge/
 
 # OS
 .DS_Store
+test/__pycache__/
+bin/__pycache__/

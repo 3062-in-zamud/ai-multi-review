@@ -193,8 +193,8 @@ generate_issues_json() {
     .issues = (.issues // []) |
     .issues |= (
       [
-        [.[] | select(.severity == "blocking")] | to_entries | map(.value + {id: "B-\(.key + 1)"}),
-        [.[] | select(.severity == "advisory")] | to_entries | map(.value + {id: "A-\(.key + 1)"})
+        ([.[] | select(.severity == "blocking")] | to_entries | map(.value + {id: "B-\(.key + 1)"})),
+        ([.[] | select(.severity == "advisory")] | to_entries | map(.value + {id: "A-\(.key + 1)"}))
       ] | add // []
     )
   '
