@@ -103,6 +103,7 @@ fi
 # ━━━ [2] diff取得 & 規模表示 ━━━
 TMPWORK=$(mktemp -d)
 PIDS=()
+# shellcheck disable=SC2317  # trap経由で呼ばれる関数 (false positive)
 cleanup() {
   for pid in "${PIDS[@]:-}"; do
     kill "$pid" 2>/dev/null || true
