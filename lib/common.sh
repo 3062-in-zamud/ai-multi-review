@@ -27,7 +27,11 @@ die() { log_error "$@"; exit 1; }
 # $HOME を ~ に置換してパスを短縮
 shorten_path() {
   local p="$1"
-  echo "${p/#$HOME/~}"
+  if [[ "$p" == "$HOME"* ]]; then
+    echo "~${p#"$HOME"}"
+  else
+    echo "$p"
+  fi
 }
 
 # stderr が TTY かチェック（CI 環境フォールバック用）
