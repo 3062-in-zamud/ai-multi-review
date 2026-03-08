@@ -8,6 +8,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOL_NAME="ai-multi-review"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/${TOOL_NAME}"
+REPO_URL="https://github.com/3062-in-zamud/ai-multi-review"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/workspaces/ai-multi-review}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -25,25 +27,58 @@ log_err()  { printf "${RED}[✗]${RESET} %s\n" "$*"; }
 echo ""
 printf "${BOLD}━━━ AI Multi Review — Setup ━━━${RESET}\n\n"
 
+# ━━━ ワンライナーモード検出とオートクローン ━━━
+# stdin が TTY でない = curl | bash 経由
+if [ ! -t 0 ]; then
+  if [ -d "$CONFIG_DIR" ]; then
+    log_info "アップグレードモード: git pull を実行します"
+    git -C "$CONFIG_DIR" pull --ff-only
+    SCRIPT_DIR="$CONFIG_DIR"
+  else
+    log_info "リポジトリをクローンします → $INSTALL_DIR"
+    git clone "$REPO_URL" "$INSTALL_DIR"
+    ln -sf "$INSTALL_DIR" "$CONFIG_DIR"
+    SCRIPT_DIR="$INSTALL_DIR"
+  fi
+  echo ""
+fi
+
+# ━━━ portable sed -i ━━━
+sed_inplace() {
+  if [ "$(uname -s)" = "Darwin" ]; then
+    sed -i '' "$@"
+  else
+    sed -i "$@"
+  fi
+}
+
 # ━━━ Phase 1: 必須ツール確認 ━━━
 echo "Phase 1: 必須ツール確認"
 echo ""
 
+check_dependency() {
+  local cmd="$1"
+  if ! command -v "$cmd" &>/dev/null; then
+    log_err "$cmd が見つかりません"
+    case "$(uname -s)" in
+      Darwin) echo "  → brew install $cmd" ;;
+      Linux)  echo "  → sudo apt-get install $cmd  (Debian/Ubuntu)" ;;
+    esac
+    return 1
+  fi
+  log_ok "$cmd"
+  return 0
+}
+
 MISSING_REQUIRED=0
 
 for tool in jq git python3; do
-  if command -v "$tool" >/dev/null 2>&1; then
-    log_ok "$tool"
-  else
-    log_err "$tool が必要です"
-    MISSING_REQUIRED=1
-  fi
+  check_dependency "$tool" || MISSING_REQUIRED=1
 done
 
 if (( MISSING_REQUIRED )); then
   echo ""
   log_err "必須ツールが不足しています。インストールしてから再実行してください。"
-  echo "  brew install jq git python3"
   exit 1
 fi
 
