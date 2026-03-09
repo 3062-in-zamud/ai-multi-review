@@ -8,6 +8,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/3062-in-zamud/ai-multi-review/ci.yml?label=CI)](https://github.com/3062-in-zamud/ai-multi-review/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Shell](https://img.shields.io/badge/shell-bash-green)](bin/ai-multi-review)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/3062-in-zamud/ai-multi-review/badge)](https://securityscorecards.dev/viewer/?uri=github.com/3062-in-zamud/ai-multi-review)
 
 🇯🇵 [日本語版はこちら](README.ja.md)
 

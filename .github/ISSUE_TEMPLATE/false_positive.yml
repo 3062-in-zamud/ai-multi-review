@@ -1,0 +1,51 @@
+name: False Positive Report
+description: AI reviewer flagged something that is not actually a problem
+labels: [false-positive]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us improve review quality by reporting false positives.
+
+  - type: textarea
+    id: finding
+    attributes:
+      label: What was flagged?
+      description: Paste the AI review finding that you believe is incorrect
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: reason
+    attributes:
+      label: Why is it a false positive?
+      description: Explain why this finding is not a real issue
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reviewer
+    attributes:
+      label: Which reviewer produced this finding?
+      options:
+        - claude
+        - gemini
+        - openai
+        - codex
+        - unknown / multiple
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "Run: `cat ~/.config/ai-multi-review/VERSION`"
+      placeholder: v0.2.0
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Code snippet, project rules, or any other relevant info
